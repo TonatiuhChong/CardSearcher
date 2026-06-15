@@ -1,0 +1,13 @@
+# MTG Card Data Files
+data.csv
+data1.csv
+biblioteca_mtg.csv
+*.csv
+*.json
+
+# Python and Environment
+__pycache__/
+.venv/
+env/
+.streamlit/
+.DS_Store
