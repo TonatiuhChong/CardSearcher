@@ -14,7 +14,7 @@ class CardRepository:
             df.columns = [c.lower().strip().replace(' ', '_') for c in df.columns]
             
             # Normalización básica de esquema
-            columnas_necesarias = ['name', 'set_name', 'rarity', 'type_line', 'cantidad', 'oracle_text', 'color_identity', 'mana_cost', 'power']
+            columnas_necesarias = ['name', 'layout', 'set_name', 'rarity', 'type_line', 'cantidad', 'oracle_text', 'color_identity', 'mana_cost', 'power']
             for col in columnas_necesarias:
                 if col not in df.columns:
                     df[col] = 0 if col == 'cantidad' else ""
