@@ -31,6 +31,7 @@ class CardService:
         
         return df.groupby('name_clean').agg({
             'name': 'first', 'set_name': 'first', 'rarity': 'first',
+            'layout': 'first',
             'type_line': 'first', 'cantidad': 'sum', 'oracle_text': 'first',
             'color_identity': 'first', 'mana_cost': 'first', 
             'mana_value': 'first', 'power_num': 'first'

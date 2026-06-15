@@ -9,6 +9,7 @@ output_file = 'data1.csv'
 # Columnas que realmente te interesan para tu buscador
 columnas_interesantes = [
     'name', 
+    'layout',
     'type_line', 
     'mana_cost', 
     'set_name', 
@@ -69,7 +70,7 @@ def json_to_csv():
         df_final['name_clean'] = df_final['name'].str.split(' // ').str[0].str.strip()
         
         # Columnas esperadas en el CSV final para el buscador y el generador de mazos
-        expected_csv_columns = ['name_clean', 'name', 'set_name', 'rarity', 'type_line', 'cantidad', 'oracle_text', 'color_identity', 'mana_cost', 'power', 'toughness']
+        expected_csv_columns = ['name_clean', 'name', 'layout', 'set_name', 'rarity', 'type_line', 'cantidad', 'oracle_text', 'color_identity', 'mana_cost', 'power', 'toughness']
         
         # Añadir columnas faltantes con valores por defecto
         for col in expected_csv_columns:
