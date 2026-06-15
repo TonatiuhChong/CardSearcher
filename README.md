@@ -1,3 +1,92 @@
-🎴 MTG Physical Collection ManagerEste es un tablero interactivo construido con Streamlit para gestionar inventarios de cartas físicas de Magic: The Gathering. Olvídate de las cartas digitales de Arena; aquí nos enfocamos en el cartón real, tus carpetas y tus mazos de Commander.✨ Características🚫 Filtrado Físico: Excluye automáticamente cartas digitales.🔍 Buscador Avanzado: Filtra por nombre, tipo, múltiples rarezas y expansiones.📦 Gestión de Stock: Edita la cantidad total de una carta directamente desde la vista unificada.📋 Reportes Inteligentes:Lista de Adquiridas: Todo lo que tienes con cantidad > 0.Wishlist: Cartas en tu base de datos que aún no posees.📥 Exportación a PDF: Genera listas impresas para llevar a tu tienda de cartas local.🚀 Carga Optimizada: Botón de "Cargar más" para manejar miles de imágenes sin ralentizar el navegador.🚀 Instalación y Uso1. Requisitos PreviosTener instalado Python 3.9 o superior.2. Clonar o descargar el códigoCrea una carpeta para el proyecto y coloca el archivo app.py.3. Instalar dependenciasAbre una terminal en esa carpeta y ejecuta:Bashpip install streamlit pandas fpdf2
-4. Preparar los datosAsegúrate de tener un archivo llamado data.csv en la misma carpeta (ver sección "Cómo obtener el CSV" abajo).5. Ejecutar la aplicaciónBashstreamlit run app.py
-📊 Cómo obtener el data.csv de ScryfallScryfall es la mejor base de datos de MTG, pero sus descargas masivas suelen ser en formato JSON. Para que esta app funcione, necesitamos un CSV con columnas específicas. Aquí te explico cómo conseguirlo:Opción A: Exportar desde una búsqueda de Scryfall (Recomendado)Si quieres gestionar un set específico o los resultados de una búsqueda personalizada:Ve a Scryfall.com.Realiza tu búsqueda (ej. e:one para Phyrexia: All Will Be One).Cambia la vista a "Checklist" en los botones de visualización superiores.Haz clic en "Export" y selecciona "CSV".Opción B: Formato de columnas necesarioSi descargas datos de otra fuente (como MTGGoldfish, Deckbox o TCGPlayer), asegúrate de que tu data.csv tenga estos encabezados (el script los limpiará automáticamente si tienen espacios o mayúsculas):ColumnaDescripciónnameNombre de la carta (ej. "Sol Ring").set_nameNombre de la expansión.raritycommon, uncommon, rare, mythic.cantidadUn número entero (si no existe, puedes crearla en Excel con 0 o 1).digitalTRUE o FALSE (para filtrar cartas de Arena).mana_costSímbolos de maná como {2}{W}.type_lineTipo de criatura o hechizo.💡 Tip Pro: Si tu CSV no tiene la columna cantidad, ábrelo en Excel o Google Sheets, añade una columna llamada cantidad, rellénala con 0 y guárdalo. ¡La app se encargará del resto!🛠️ Tecnologías utilizadasStreamlit: Para la interfaz web mágica.Pandas: Para procesar tu colección como un auténtico Archisabio.FPDF2: Para la alquimia de convertir datos en documentos PDF.Scryfall API: Para las imágenes de las cartas en tiempo real.
+# 🎴 MTG Physical Collection Manager & Commander Builder
+
+Este es un tablero interactivo profesional construido con **Streamlit** para gestionar inventarios de cartas físicas de Magic: The Gathering. El sistema está diseñado para entusiastas de Commander que desean organizar su colección y construir mazos estratégicos basados en sus cartas reales.
+
+---
+
+## ✨ Características Principales
+
+### 📦 Gestión de Colección
+*   **Buscador Avanzado:** Filtros dinámicos por nombre, tipo/raza, múltiples rarezas y expansiones.
+*   **Gestión de Stock:** Edición rápida de cantidades. Las cantidades se preservan incluso al actualizar la base de datos de Scryfall.
+*   **Visual Wishlist:** Identifica instantáneamente qué cartas te faltan según tus filtros actuales.
+
+### 🪄 Generador de Mazos Commander (100 cartas)
+*   **Construcción por Sinergia:** El algoritmo analiza el `oracle_text` del Comandante (Tokens, Contadores, Veneno, etc.) y prioriza cartas que apoyen esa estrategia.
+*   **Identidad de Color Estricta:** Filtrado automático para asegurar que el mazo sea legal en Commander.
+*   **Optimización de Curva:** Penalización inteligente para cartas de alto coste de maná para asegurar un mazo jugable.
+*   **Prioridad de Inventario:** El sistema prioriza sugerirte cartas que **ya tienes en stock** (`cantidad > 0`).
+
+### 🖼️ Interfaz Visual e Interactiva
+*   **Flip de Cartas:** Soporte para cartas de doble cara (DFC, Transform, Aventuras) con vista frontal y trasera.
+*   **Paginación Inteligente:** Navegación fluida de 20 en 20 cartas para evitar ralentizaciones.
+*   **Cache Buster:** Botón de recarga individual para imágenes que no cargan correctamente.
+*   **Exportación a PDF:** Genera listas de mazo o wishlists listas para imprimir.
+
+---
+
+## 🛠️ Arquitectura del Proyecto
+
+El proyecto sigue una **Arquitectura por Capas** para facilitar el mantenimiento:
+
+1.  **Capa de Presentación (`app.py`):** Interfaz de usuario pura con Streamlit.
+2.  **Capa de Negocio (`service.py`):** Lógica de filtrado, reglas de Commander, cálculos de maná y algoritmos de construcción.
+3.  **Capa de Datos (`repository.py`):** Persistencia, carga y normalización del archivo `data1.csv`.
+
+---
+
+## 🚀 Instalación y Configuración
+
+### 1. Requisitos
+*   Python 3.9 o superior.
+*   Acceso a internet (para las imágenes vía Scryfall API).
+
+### 2. Instalación de dependencias
+```bash
+pip install streamlit pandas fpdf2
+```
+
+### 3. Preparación de los datos (Scryfall)
+1.  Descarga el archivo **Default Cards** (JSON) desde Scryfall Bulk Data.
+2.  Colócalo en la carpeta raíz y actualiza el nombre del archivo en `jsonToCsv.py`.
+3.  Ejecuta el script de sincronización:
+    ```bash
+    python jsonToCsv.py
+    ```
+    *Este script generará `data1.csv` extrayendo colores, texto, costes y poder de combate.*
+
+### 4. Ejecutar la aplicación
+```bash
+streamlit run app.py
+```
+
+---
+
+## 📊 Estructura de Datos
+
+El archivo `data1.csv` requiere las siguientes columnas para el funcionamiento completo de todas las características:
+
+| Columna | Descripción |
+| :--- | :--- |
+| `name` | Nombre completo de la carta. |
+| `layout` | Tipo de diseño (normal, transform, etc) para el Flip. |
+| `color_identity` | Colores legales de la carta. |
+| `oracle_text` | Texto de habilidades para el motor de sinergia. |
+| `mana_cost` / `mana_value` | Coste para el ordenamiento y la curva. |
+| `cantidad` | Tu inventario físico personal. |
+
+---
+
+## 🛠️ Tecnologías Utilizadas
+
+*   **Streamlit:** Framework para la UI web.
+*   **Pandas:** Motor de procesamiento de datos.
+*   **FPDF2:** Generación de reportes en PDF.
+*   **Scryfall API:** Fuente de datos e imágenes en tiempo real.
+
+---
+
+## 📝 Notas de Versión
+*   **v2.0:** Migración a arquitectura por capas y motor de sinergia para mazos.
+*   **v1.5:** Implementación de Flip y Paginación.
+*   **v1.0:** Versión inicial del buscador visual.
