@@ -16,7 +16,9 @@ columnas_interesantes = [
     'collector_number',
     'oracle_text',
     'color_identity',
-    'digital'
+    'digital',
+    'power',
+    'toughness'
 ]
 
 def json_to_csv():
@@ -67,13 +69,15 @@ def json_to_csv():
         df_final['name_clean'] = df_final['name'].str.split(' // ').str[0].str.strip()
         
         # Columnas esperadas en el CSV final para el buscador y el generador de mazos
-        expected_csv_columns = ['name_clean', 'name', 'set_name', 'rarity', 'type_line', 'cantidad', 'oracle_text', 'color_identity', 'mana_cost']
+        expected_csv_columns = ['name_clean', 'name', 'set_name', 'rarity', 'type_line', 'cantidad', 'oracle_text', 'color_identity', 'mana_cost', 'power', 'toughness']
         
         # Añadir columnas faltantes con valores por defecto
         for col in expected_csv_columns:
             if col not in df_final.columns:
                 if col == 'cantidad':
                     df_final[col] = 0
+                elif col in ['power', 'toughness']:
+                    df_final[col] = '0'
                 else:
                     df_final[col] = ''
 
