@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import re
 import urllib.parse
 from fpdf import FPDF
 
@@ -10,7 +11,7 @@ st.set_page_config(page_title="MTG Collection Manager Pro", layout="wide")
 @st.cache_data
 def load_data_from_csv():
     try:
-        df = pd.read_csv('data.csv')
+        df = pd.read_csv('data1.csv')
         df.columns = [c.lower().strip().replace(' ', '_') for c in df.columns]
         
         # Asegurar que todas las columnas necesarias existan para evitar errores de carga y del generador
@@ -51,12 +52,12 @@ if 'view_mode' not in st.session_state:
 
 # Si el DataFrame está vacío (error de carga o archivo inexistente)
 if st.session_state.df.empty:
-    st.warning("⚠️ La base de datos está vacía o no se encontró 'data.csv'. Por favor, ejecuta 'jsonToCsv.py' para generarla.")
+    st.warning("⚠️ La base de datos está vacía o no se encontró 'data1.csv'. Por favor, ejecuta 'jsonToCsv.py' para generarla.")
     st.stop()
 
 # --- FUNCIONES ---
 def guardar_cambios():
-    st.session_state.df.to_csv('data.csv', index=False)
+    st.session_state.df.to_csv('data1.csv', index=False)
 
 def aplicar_filtros(df_input, nombre, tipo, rarezas, colecciones):
     df_res = df_input.copy()
@@ -187,37 +188,121 @@ elif mode == "deck":
 
     main_cmd = potential_commanders.iloc[0]
 
-    # 2. DEFINICIÓN DEL TEMA Y EL POOL
+    # 2. DEFINICIÓN DEL TEMA
     # Si el usuario especificó un tipo, ese es el tema. Si no, usamos el campo nombre como tema fallback.
     tema_mazo = f_tipo if f_tipo else f_nombre
-    df_f = aplicar_filtros(st.session_state.df, "", tema_mazo, f_rareza, f_sets)
-        
-    if not df_f.empty:
+    
+    # 3. CONSTRUCCIÓN DEL POOL LEGAL
+    if not st.session_state.df.empty:
         # Intentar parsear la identidad de color (viene como string "['W', 'U']")
         try:
             cmd_colors = ast.literal_eval(main_cmd['color_identity'])
+            if not cmd_colors: # Si es incoloro
+                cmd_colors = []
         except:
-            cmd_colors = [] # Fallback
+            cmd_colors = [] # Fallback si hay un error al parsear
 
-        st.success(f"👑 **Comandante:** {main_cmd['name']} ({''.join(cmd_colors)})")
+        cmd_colors_set = set(cmd_colors)
+        st.success(f"👑 **Comandante:** {main_cmd['name']} ({''.join(cmd_colors_set) if cmd_colors_set else 'C'})")
 
         # --- FILTRADO POR IDENTIDAD DE COLOR ---
-        # Solo cartas que sus colores estén contenidos en la identidad del comandante
-        def check_color(row_colors_str):
+        def check_color_commander_legal(row):
             try:
-                row_colors = ast.literal_eval(row_colors_str)
-                return all(c in cmd_colors for c in row_colors)
-            except: return True
+                # 1. Verificar identidad de color oficial de la carta
+                card_color_identity = ast.literal_eval(str(row['color_identity']))
+                if not all(c in cmd_colors_set for c in card_color_identity):
+                    return False
+                
+                # 2. Verificar símbolos de maná en el costo de maná de la carta
+                if 'mana_cost' in row and pd.notna(row['mana_cost']) and row['mana_cost'] != '':
+                    mana_symbols_in_cost = re.findall(r'\{([WUBRG])\}', str(row['mana_cost']).upper())
+                    if any(s not in cmd_colors_set for s in mana_symbols_in_cost):
+                        return False
 
-        pool = df_f[df_f['color_identity'].apply(check_color)].copy()
+                # 3. Verificar símbolos de maná en el texto de reglas (oracle_text)
+                # Esto es crucial para habilidades activadas o color indicators
+                text = str(row['oracle_text']).upper()
+                all_possible_colors = {'W', 'U', 'B', 'R', 'G'}
+                
+                # Excluir si el texto contiene un símbolo de maná de un color prohibido
+                for forbidden_color in all_possible_colors - cmd_colors_set:
+                    if f"{{{forbidden_color}}}" in text:
+                        return False
+
+                # 4. **NUEVO/MEJORADO**: Para tierras, verificar el maná que producen
+                if "LAND" in str(row['type_line']).upper():
+                    # Tierras básicas: su tipo ya implica producción de maná
+                    basic_land_types = {'PLAINS': 'W', 'ISLAND': 'U', 'SWAMP': 'B', 'MOUNTAIN': 'R', 'FOREST': 'G'}
+                    for bl_type, bl_color in basic_land_types.items():
+                        if bl_type in str(row['type_line']).upper() and bl_color not in cmd_colors_set:
+                            return False
+                    
+                    # Tierras que producen maná de "cualquier color" o colores específicos
+                    # Si la tierra produce un color que NO está en cmd_colors_set, es ilegal.
+                    # Esto ya está cubierto por el punto 3 para símbolos explícitos.
+                    # Lands como Command Tower ("Add one mana of any color") son legales si el comandante tiene colores.
+                    # Si el comandante es incoloro, estas tierras también son legales, pero no producen colores.
+
+                return True
+            except (ValueError, SyntaxError): # Para color_identity malformado o errores de regex
+                return False # Si no se puede parsear, mejor ser estricto y excluir
+
+        # 1. Pool de cartas legales por color (ignorando filtros de sidebar para las tierras)
+        pool_legal_por_color = st.session_state.df[
+            (st.session_state.df.apply(check_color_commander_legal, axis=1)) &
+            (~st.session_state.df['name_clean'].isin([main_cmd['name_clean']]))
+        ].copy()
+
+        # 2. Separar tierras (las tierras ignoran rareza/set para asegurar que siempre haya básicas)
+        is_land = pool_legal_por_color['type_line'].str.contains("Land", case=False, na=False)
+        lands_pool = pool_legal_por_color[is_land].copy()
         
-        lands = pool[pool['type_line'].str.contains("Land", case=False, na=False)]
-        
-        # 3. Resto del mazo (Hechizos/Criaturas)
-        non_lands = pool[~pool['type_line'].str.contains("Land", case=False, na=False)].copy()
+        # 3. Resto del pool (hechizos) sí aplican filtros del sidebar
+        non_lands = pool_legal_por_color[~is_land].copy()
+        if f_sets: non_lands = non_lands[non_lands['set_name'].isin(f_sets)]
+        if f_rareza: non_lands = non_lands[non_lands['rarity'].isin(f_rareza)]
+
+        # --- REFINAMIENTO DE TIERRAS ---
+        def puntuar_tierra(row):
+            score = 0
+            text = str(row['oracle_text']).upper()
+            type_line = str(row['type_line']).upper()
+            
+            # Mapeo de tipos básicos
+            basic_map = {'W': 'PLAINS', 'U': 'ISLAND', 'B': 'SWAMP', 'R': 'MOUNTAIN', 'G': 'FOREST'}
+
+            for color in cmd_colors_set:
+                # Puntos si produce el color o si es el tipo de tierra básica correspondiente
+                if f"{{{color}}}" in text or basic_map.get(color, "N/A") in type_line:
+                    score += 10 # Alta prioridad para colores específicos del comandante
+            
+            # Puntos por producir cualquier color (útil si el comandante tiene colores)
+            if ("ANY COLOR" in text or "ANY MANA" in text) and cmd_colors_set:
+                score += 5 # Menos que un color específico, pero sigue siendo bueno
+
+            # Penalizar tierras que solo producen incoloro si hay colores en el comandante
+            # y no producen colores específicos o "any color"
+            if not cmd_colors_set and ("ADD {C}" not in text and "ANY COLOR" not in text):
+                score += 1 # Tierras incoloras son neutrales/ligeramente útiles para comandantes incoloros
+            elif cmd_colors_set and score == 0 and not ("ANY COLOR" in text or "ANY MANA" in text):
+                score -= 5 # Penalizar tierras que no contribuyen a la base de maná de color
+
+            return score
+
+        if not lands_pool.empty:
+            lands_pool['prioridad_mana'] = lands_pool.apply(puntuar_tierra, axis=1)
+            lands_pool = lands_pool.sort_values('prioridad_mana', ascending=False)
+        else:
+            st.warning("⚠️ No se encontraron tierras legales con los filtros actuales y la identidad de color del Comandante.")
 
         # --- ANÁLISIS DE SINERGIA ---
-        # Buscamos palabras clave en el texto del comandante para definir la estrategia
+        # Palabras clave de "Jugabilidad" (Ramp/Draw) y "Protección" para reforzar el mazo
+        utilidades = {
+            "ramp": ["mana", "search", "library", "land", "battlefield", "treasure"],
+            "draw": ["draw", "discard", "scry", "look"],
+            "protection": ["prevent", "damage", "hexproof", "shroud", "indestructible", "protection", "ward", "attack", "combat"]
+        }
+
         estrategias = {
             "token": ["token", "create"],
             "counters": ["+1/+1", "counter", "proliferate"],
@@ -228,18 +313,30 @@ elif mode == "deck":
         }
         
         cmd_text = str(main_cmd['oracle_text']).lower()
-        keywords_interes = []
+        theme_keys = []
         for est, keys in estrategias.items():
             if any(k in cmd_text for k in keys):
-                keywords_interes.extend(keys)
-
-        # Calculamos score de sinergia
-        def calcular_sinergia(text):
-            text = str(text).lower()
-            return sum(1 for k in keywords_interes if k in text)
-
-        non_lands['sinergia'] = non_lands['oracle_text'].apply(calcular_sinergia)
+                theme_keys.extend(keys)
         
+        util_keys = [k for v in utilidades.values() for k in v]
+
+        def calcular_sinergia_inteligente(row):
+            text_completo = (str(row['oracle_text']) + " " + str(row['name']) + " " + str(row['type_line'])).lower()
+            score = 0
+            # Tema principal (ej. "Angel", "Elf") - Muy alta prioridad
+            if tema_mazo and tema_mazo.lower() in text_completo:
+                score += 20
+            # Sinergia con la mecánica del comandante
+            score += sum(8 for k in theme_keys if k in text_completo)
+            # Utilidad y Protección (Ramp, Draw, Combat, Ward)
+            score += sum(4 for k in util_keys if k in text_completo)
+            return score
+
+        if not non_lands.empty:
+            non_lands['sinergia'] = non_lands.apply(calcular_sinergia_inteligente, axis=1)
+        else:
+            non_lands['sinergia'] = 0
+
         # Priorizamos: Sinergia > Rareza
         rarity_rank = {'mythic': 0, 'rare': 1, 'uncommon': 2, 'common': 3}
         non_lands['priority'] = non_lands['rarity'].str.lower().map(rarity_rank).fillna(4)
@@ -248,18 +345,16 @@ elif mode == "deck":
         deck_list = []
         deck_list.append(main_cmd.to_dict())
 
-        # Paso B: Seleccionar tierras (Máximo 36)
-        selected_lands = lands.head(36)
-        deck_list.extend(selected_lands.to_dict('records'))
+        # Paso B: Seleccionar tierras (36) que provean el maná correcto
+        deck_list.extend(lands_pool.head(36).to_dict('records'))
         
         # Paso C: Distribución equilibrada de hechizos
-        # Definimos objetivos por categoría para un mazo sólido
         objetivos = {
-            'Creature': 30,
-            'Instant': 10,
-            'Sorcery': 10,
-            'Enchantment': 10,
-            'Artifact': 3
+            'Creature': 25,
+            'Artifact': 14, # Más artefactos para asegurar maná y utilidad
+            'Enchantment': 8,
+            'Instant': 8,
+            'Sorcery': 7
         }
         
         nombres_en_mazo = {c['name_clean'] for c in deck_list}

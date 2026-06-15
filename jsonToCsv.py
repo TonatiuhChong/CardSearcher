@@ -4,7 +4,7 @@ import os
 
 # Configuración
 input_file = 'default-cards-20260614090813.json'
-output_file = 'data.csv'
+output_file = 'data1.csv'
 
 # Columnas que realmente te interesan para tu buscador
 columnas_interesantes = [
@@ -44,61 +44,46 @@ def json_to_csv():
     
     df_json = df_json.drop_duplicates(subset=['name', 'set_name'])
     
-    # Verificar si el archivo CSV de salida ya existe
-    file_exists = os.path.exists(output_file)
-    df_existente = pd.DataFrame(columns=['name', 'set_name']) # DataFrame vacío por defecto
+    # Intentar cargar cantidades existentes de data.csv o data1.csv para no perder tu progreso
+    df_existente = pd.DataFrame(columns=['name', 'set_name', 'cantidad'])
+    for f in ['data.csv', 'data1.csv']:
+        if os.path.exists(f):
+            try:
+                temp_df = pd.read_csv(f)
+                if 'name' in temp_df.columns and 'cantidad' in temp_df.columns:
+                    df_existente = temp_df[['name', 'set_name', 'cantidad']]
+                    print(f"ℹ️ Cargando cantidades desde '{f}'...")
+                    break
+            except:
+                continue
 
-    if os.path.exists(output_file):
-        print(f"El archivo {output_file} ya existe. Buscando cartas nuevas...")
-        try:
-            df_existente = pd.read_csv(output_file)
-            # Asegurarse de que las columnas 'name' y 'set_name' existan para la fusión
-            if 'name' not in df_existente.columns or 'set_name' not in df_existente.columns:
-                print(f"⚠️ Advertencia: El archivo '{output_file}' no contiene las columnas 'name' y 'set_name' necesarias. Se tratará como un archivo nuevo.")
-                file_exists = False # Tratar como nuevo si faltan columnas esenciales
-                df_existente = pd.DataFrame(columns=['name', 'set_name'])
-        except pd.errors.EmptyDataError:
-            print(f"⚠️ Advertencia: El archivo '{output_file}' está vacío. Se tratará como un archivo nuevo.")
-            file_exists = False
-            df_existente = pd.DataFrame(columns=['name', 'set_name'])
-        except Exception as e:
-            print(f"❌ Error al leer el archivo '{output_file}': {e}. Se tratará como un archivo nuevo.")
-            file_exists = False
-            df_existente = pd.DataFrame(columns=['name', 'set_name'])
-    else:
-        print(f"El archivo {output_file} no existe. Creando base de datos...")
-
-    # Comparamos por Nombre y Set para encontrar filas en JSON que no están en el CSV
+    # Combinamos la info del JSON con las cantidades que ya tenías
     keys = ['name', 'set_name']
-    df_nuevo = df_json.merge(df_existente[keys] if not df_existente.empty else pd.DataFrame(columns=keys),
-                             on=keys,
-                             how='left',
-                             indicator=True)
-    df_nuevo = df_nuevo[df_nuevo['_merge'] == 'left_only'].drop(columns=['_merge'])
+    df_final = df_json.merge(df_existente, on=keys, how='left')
+    df_final['cantidad'] = df_final['cantidad'].fillna(0).astype(int)
 
-    if not df_nuevo.empty:
-        # Preparar columnas para que coincidan con la estructura esperada por app.py
-        df_nuevo['name_clean'] = df_nuevo['name'].str.split(' // ').str[0].str.strip()
-        df_nuevo['cantidad'] = 0
+    if not df_final.empty:
+        # Preparar columnas finales
+        df_final['name_clean'] = df_final['name'].str.split(' // ').str[0].str.strip()
         
         # Columnas esperadas en el CSV final para el buscador y el generador de mazos
-        expected_csv_columns = ['name_clean', 'name', 'set_name', 'rarity', 'type_line', 'cantidad', 'oracle_text', 'color_identity']
+        expected_csv_columns = ['name_clean', 'name', 'set_name', 'rarity', 'type_line', 'cantidad', 'oracle_text', 'color_identity', 'mana_cost']
         
-        # Añadir columnas faltantes a df_nuevo con valores por defecto si no están presentes
+        # Añadir columnas faltantes con valores por defecto
         for col in expected_csv_columns:
-            if col not in df_nuevo.columns:
+            if col not in df_final.columns:
                 if col == 'cantidad':
-                    df_nuevo[col] = 0
+                    df_final[col] = 0
                 else:
-                    df_nuevo[col] = '' # Valor por defecto para otras columnas
+                    df_final[col] = ''
 
-        # Reordenar columnas para que coincidan exactamente con la estructura de tu data.csv
-        df_nuevo = df_nuevo[expected_csv_columns]
+        # Reordenar columnas
+        df_final = df_final[expected_csv_columns]
 
-        print(f"Agregando {len(df_nuevo)} cartas nuevas a {output_file}...")
-        df_nuevo.to_csv(output_file, mode='a', index=False, header=not file_exists, encoding='utf-8-sig')
+        print(f"💾 Guardando {len(df_final)} cartas en {output_file}...")
+        df_final.to_csv(output_file, index=False, encoding='utf-8-sig')
     else:
-        print("No se encontraron cartas nuevas para agregar.")
+        print("No se encontraron cartas para procesar.")
     
     print("¡Proceso completado!")
 
